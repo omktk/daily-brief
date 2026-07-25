@@ -1,0 +1,47 @@
+# Routine が main へ直接 push できない場合の保険。
+# claude/** ブランチに docs/ の変更が push されたら、その内容を main に同期する。
+# main へ直接 push できた場合はこのワークフローは発火しない（無害）。
+name: Sync docs to main
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+    paths:
+      - 'docs/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-docs-to-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Copy docs/ from pushed branch onto main
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          git checkout -B main origin/main
+
+          # push されたコミットから docs/ だけを取り込む（ステージ済みになる）
+          git checkout "$GITHUB_SHA" -- docs
+
+          if git diff --cached --quiet; then
+            echo "docs/ に差分なし。何もしない。"
+            exit 0
+          fi
+
+          git commit -m "sync docs from ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+          git push origin main
